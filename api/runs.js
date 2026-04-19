@@ -1,6 +1,8 @@
 import { requireSession } from "./_auth.js";
 import { supabaseAdmin } from "./_supabase.js";
 
+export const config = { runtime: "nodejs" };
+
 export default async function handler(req, res) {
   const session = requireSession(req);
   if (!session.ok) {
@@ -24,4 +26,3 @@ export default async function handler(req, res) {
 
   res.status(200).json({ success: true, runs: data ?? [] });
 }
-

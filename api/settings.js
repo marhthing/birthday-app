@@ -1,5 +1,7 @@
-it isimport { requireSession } from "./_auth.js";
+import { requireSession } from "./_auth.js";
 import { supabaseAdmin } from "./_supabase.js";
+
+export const config = { runtime: "nodejs" };
 
 function supabaseFunctionUrlFromProjectUrl(projectUrl) {
   try {

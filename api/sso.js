@@ -1,5 +1,7 @@
 import { verifyPortalToken, signSessionToken } from "./_auth.js";
 
+export const config = { runtime: "nodejs" };
+
 export default function handler(req, res) {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const secret = process.env.BIRTHDAY_SSO_SECRET || "";

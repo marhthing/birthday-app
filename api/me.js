@@ -1,5 +1,7 @@
 import { requireSession } from "./_auth.js";
 
+export const config = { runtime: "nodejs" };
+
 export default function handler(req, res) {
   const session = requireSession(req);
   if (!session.ok) {

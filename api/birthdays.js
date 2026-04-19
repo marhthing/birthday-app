@@ -1,6 +1,8 @@
 import { requireSession } from "./_auth.js";
 import { fetchPortalJsonWithChallenge } from "./_portalFetch.js";
 
+export const config = { runtime: "nodejs" };
+
 export default async function handler(req, res) {
   const session = requireSession(req);
   if (!session.ok) {
