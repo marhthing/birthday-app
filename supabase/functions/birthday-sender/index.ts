@@ -1,6 +1,13 @@
 // Supabase Edge Function: birthday-sender
 // Schedules can call this function frequently; it enforces its own interval via DB settings.
 
+// VS Code / TypeScript (non-Deno) type shim:
+// Supabase Edge Functions run on Deno, but the TS language server may not know `Deno`.
+declare const Deno: {
+  env: { get: (key: string) => string | undefined };
+  serve: (handler: (req: Request) => Response | Promise<Response>) => void;
+};
+
 type BirthdayRow = {
   name: string;
   class: string;
@@ -132,26 +139,6 @@ async function supabaseUpdate(
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Supabase update failed (${res.status}): ${text}`);
-  }
-  return await res.json();
-}
-
-async function supabaseSelect(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  tableWithQuery: string,
-) {
-  const url = `${supabaseUrl}/rest/v1/${tableWithQuery}`;
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      apikey: serviceRoleKey,
-      authorization: `Bearer ${serviceRoleKey}`,
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Supabase select failed (${res.status}): ${text}`);
   }
   return await res.json();
 }
@@ -356,21 +343,6 @@ Deno.serve(async (req) => {
     if (!supabaseUrl || !serviceRoleKey) throw new Error("Missing Supabase env vars.");
     if (!dryRun && (!portalApiUrl || !portalToken)) throw new Error("Missing portal API env vars.");
     if (!dryRun && (!brevoKey || !senderEmail)) throw new Error("Missing Brevo env vars.");
-
-    // Load settings (single row id=1)
-    const settingsRows = await supabaseSelect(
-      supabaseUrl,
-      serviceRoleKey,
-      "birthday_settings?select=*&id=eq.1&limit=1",
-    ) as Array<Record<string, unknown>>;
-    const settings = settingsRows?.[0] ?? {};
-    const enabled = Boolean(settings["enabled"] ?? true);
-    const lastRunAt = typeof settings["last_run_at"] === "string" ? settings["last_run_at"] as string : "";
-
-    if (!enabled) {
-      return new Response(JSON.stringify({ success: true, skipped: "disabled" }), { headers: jsonHeaders });
-    }
-    // No interval gating: the scheduler frequency controls how often we check.
 
     const portalDataFromBody = payload?.portal_data ?? (
       payload?.success === true && payload?.date && payload?.count !== undefined && Array.isArray(payload?.birthdays)

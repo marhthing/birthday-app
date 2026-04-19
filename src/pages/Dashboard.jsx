@@ -9,6 +9,7 @@ function formatDateTime(value) {
 
 export default function Dashboard({ user }) {
   const [settings, setSettings] = useState(null);
+  const [cron, setCron] = useState(null);
   const [runs, setRuns] = useState([]);
   const [logs, setLogs] = useState([]);
   const [birthdays, setBirthdays] = useState([]);
@@ -34,6 +35,7 @@ export default function Dashboard({ user }) {
       }
 
       setSettings(settingsRes.settings ?? null);
+      setCron(settingsRes.cron ?? null);
       setRuns(runsRes.runs ?? []);
       setLogs(logsRes.logs ?? []);
 
@@ -68,7 +70,6 @@ export default function Dashboard({ user }) {
     if (!settings) return;
     setSaving(true);
     setStatus(null);
-    setSaving(false);
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
@@ -83,6 +84,8 @@ export default function Dashboard({ user }) {
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Unable to save settings.");
       return;
+    } finally {
+      setSaving(false);
     }
     await load();
   };
@@ -166,6 +169,46 @@ export default function Dashboard({ user }) {
                   <option value="no">No</option>
                 </select>
               </label>
+
+              <div className="divider" />
+
+              <div className="muted" style={{ marginTop: 4 }}>
+                Scheduler (Supabase Cron)
+              </div>
+
+              <label className="label">
+                Cron enabled
+                <select
+                  className="input"
+                  value={cron?.active ? "yes" : "no"}
+                  onChange={(e) => updateSettings({ cron_active: e.target.value === "yes" })}
+                  disabled={saving}
+                >
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+
+              <label className="label">
+                Interval (cron)
+                <input
+                  className="input"
+                  value={cron?.schedule ?? "*/5 * * * *"}
+                  onChange={(e) => setCron((c) => ({ ...(c || {}), schedule: e.target.value }))}
+                  disabled={saving}
+                  placeholder="*/5 * * * *"
+                />
+                <div className="muted">Example: */5 * * * * (every 5 minutes), * * * * * (every minute)</div>
+              </label>
+
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => updateSettings({ cron_schedule: cron?.schedule ?? "*/5 * * * *" })}
+                disabled={saving}
+              >
+                Save scheduler
+              </button>
             </div>
           ) : (
             <div className="muted">No settings row found. Run the SQL in `birthday-app/supabase/schema.sql`.</div>

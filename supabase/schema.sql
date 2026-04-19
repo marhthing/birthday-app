@@ -88,3 +88,76 @@ create policy "birthday_settings_update"
   to authenticated
   using (true)
   with check (true);
+
+-- Cron helpers (Edge Function scheduler)
+-- Requires extensions: pg_cron (schema cron) and pg_net (schema net).
+create extension if not exists pg_cron with schema extensions;
+create extension if not exists pg_net with schema extensions;
+
+create or replace function public.birthday_sender_cron_get()
+returns table (
+  jobname text,
+  schedule text,
+  active boolean
+)
+language sql
+security definer
+set search_path = public, cron
+as $$
+  select j.jobname, j.schedule, j.active
+  from cron.job j
+  where j.jobname in ('birthday-sender', 'birthday-sender-every-5-min')
+  order by (j.jobname = 'birthday-sender') desc
+  limit 1;
+$$;
+
+create or replace function public.birthday_sender_cron_set(
+  p_schedule text,
+  p_active boolean,
+  p_function_url text
+)
+returns table (
+  jobname text,
+  schedule text,
+  active boolean
+)
+language plpgsql
+security definer
+set search_path = public, cron, net
+as $$
+declare
+  v_jobid bigint;
+  v_command text;
+begin
+  if p_schedule is null or btrim(p_schedule) = '' then
+    raise exception 'schedule is required';
+  end if;
+  if p_function_url is null or btrim(p_function_url) = '' then
+    raise exception 'function_url is required';
+  end if;
+
+  v_jobid := (
+    select j.jobid
+    from cron.job j
+    where j.jobname in ('birthday-sender', 'birthday-sender-every-5-min')
+    order by (j.jobname = 'birthday-sender') desc
+    limit 1
+  );
+
+  v_command := format(
+    'select net.http_post(url:=%L, headers:=''{}''::jsonb, body:=''{}''::jsonb);',
+    p_function_url
+  );
+
+  if v_jobid is null then
+    v_jobid := cron.schedule('birthday-sender', p_schedule, v_command);
+  else
+    perform cron.alter_job(v_jobid, p_schedule, v_command, null, null, p_active);
+  end if;
+
+  return query
+  select j.jobname, j.schedule, j.active
+  from cron.job j
+  where j.jobid = v_jobid;
+end;
+$$;
