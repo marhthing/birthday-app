@@ -516,7 +516,7 @@ Deno.serve(async (req) => {
       if (recipients.length === 0) continue;
 
       for (const email of recipients) {
-        const subject = `Happy Birthday to ${birthday.name} — SFGS`;
+        const subject = `Birthday notice for ${birthday.name}`;
         try {
           // Reserve first (prevents double-send across concurrent runs).
           // Dedupe by unique constraint: (date, reg_number, recipient_email)
