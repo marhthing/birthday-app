@@ -45,6 +45,25 @@ export function verifyPortalToken(token, secret) {
   return { ok: true, payload };
 }
 
+export function signSessionToken(payload, secret, ttlSeconds) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "HS256", typ: "JWT" };
+  const body = {
+    ...payload,
+    iss: "sfgs-birthday-app",
+    aud: "sfgs-birthday-app",
+    iat: now,
+    exp: now + Math.max(60, Number(ttlSeconds) || 28800),
+  };
+
+  const headerB64 = b64urlEncode(JSON.stringify(header));
+  const payloadB64 = b64urlEncode(JSON.stringify(body));
+  const input = `${headerB64}.${payloadB64}`;
+  const sig = crypto.createHmac("sha256", secret).update(input).digest();
+  const sigB64 = b64urlEncode(sig);
+  return `${input}.${sigB64}`;
+}
+
 export function readCookie(req, name) {
   const header = req.headers.cookie || "";
   const parts = header.split(";").map((p) => p.trim());
@@ -65,4 +84,3 @@ export function requireSession(req) {
   if (!verified.ok) return { ok: false, error: verified.error };
   return { ok: true, user: verified.payload };
 }
-
