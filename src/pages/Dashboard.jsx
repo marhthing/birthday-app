@@ -41,7 +41,6 @@ function minutesFromCron(cron) {
 export default function Dashboard({ user }) {
   const [settings, setSettings] = useState(null);
   const [cron, setCron] = useState(null);
-  const [runs, setRuns] = useState([]);
   const [logs, setLogs] = useState([]);
   const [birthdays, setBirthdays] = useState([]);
   const [birthdayDate, setBirthdayDate] = useState("");
@@ -50,6 +49,7 @@ export default function Dashboard({ user }) {
   const [saving, setSaving] = useState(false);
   const [showAdvancedCron, setShowAdvancedCron] = useState(false);
   const [cronDirty, setCronDirty] = useState(false);
+  const [lastRun, setLastRun] = useState(null);
 
   const load = async () => {
     setStatus(null);
@@ -57,7 +57,7 @@ export default function Dashboard({ user }) {
     try {
       const [settingsRes, runsRes, logsRes, birthdaysRes] = await Promise.all([
         fetchJson("/api/settings"),
-        fetchJson("/api/runs?limit=20"),
+        fetchJson("/api/runs?limit=1"),
         fetchJson("/api/logs?limit=50"),
         fetchJson("/api/birthdays?limit=200"),
       ]);
@@ -70,7 +70,7 @@ export default function Dashboard({ user }) {
       setSettings(settingsRes.settings ?? null);
       setCron(settingsRes.cron ?? null);
       setCronDirty(false);
-      setRuns(runsRes.runs ?? []);
+      setLastRun((runsRes.runs && runsRes.runs[0]) ? runsRes.runs[0] : null);
       setLogs(logsRes.logs ?? []);
 
       if (birthdaysRes?.success) {
@@ -91,14 +91,13 @@ export default function Dashboard({ user }) {
   }, []);
 
   const summary = useMemo(() => {
-    const last = runs?.[0];
     return {
-      lastRunAt: last?.ran_at ?? settings?.last_run_at ?? null,
-      lastStatus: last?.status ?? "",
+      lastRunAt: lastRun?.ran_at ?? settings?.last_run_at ?? null,
+      lastStatus: lastRun?.status ?? "",
       lastSent: settings?.last_run_sent ?? 0,
       lastFailed: settings?.last_run_failed ?? 0,
     };
-  }, [runs, settings]);
+  }, [lastRun, settings]);
 
   const updateSettings = async (updates) => {
     if (!settings) return;
@@ -286,36 +285,6 @@ export default function Dashboard({ user }) {
       </div>
 
       {status && <div className="notice error">{status}</div>}
-
-      <div className="card">
-        <h2 className="h2">Recent runs</h2>
-        <div className="table-scroll">
-        <div className="table">
-          <div className="thead">
-            <div>Ran at</div>
-            <div>Date</div>
-            <div>Birthdays</div>
-            <div>Sent</div>
-            <div>Failed</div>
-            <div>Status</div>
-          </div>
-          {runs.length === 0 ? (
-            <div className="trow muted">No runs yet.</div>
-          ) : (
-            runs.map((r) => (
-              <div key={r.id} className="trow">
-                <div>{formatDateTime(r.ran_at)}</div>
-                <div>{r.date}</div>
-                <div>{r.birthday_count}</div>
-                <div>{r.sent_count}</div>
-                <div>{r.failed_count}</div>
-                <div>{r.status}</div>
-              </div>
-            ))
-          )}
-        </div>
-        </div>
-      </div>
 
       <div className="card">
         <h2 className="h2">Recent emails</h2>
