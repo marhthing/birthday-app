@@ -2,7 +2,7 @@ import { BrowserRouter, Route, Routes, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Dashboard from "./pages/Dashboard.jsx";
 
-function Topbar({ user, onSignOut }) {
+function Topbar({ user }) {
   return (
     <div className="topbar">
       <div className="brand">
