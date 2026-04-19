@@ -23,7 +23,9 @@ export function verifyPortalToken(token, secret) {
   const input = `${headerB64}.${payloadB64}`;
   const expected = crypto.createHmac("sha256", secret).update(input).digest();
   const expectedB64 = b64urlEncode(expected);
-  if (!crypto.timingSafeEqual(Buffer.from(sigB64), Buffer.from(expectedB64))) {
+  const sigBuf = Buffer.from(sigB64);
+  const expBuf = Buffer.from(expectedB64);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
     return { ok: false, error: "Bad signature." };
   }
 

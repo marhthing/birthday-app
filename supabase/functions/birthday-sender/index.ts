@@ -156,28 +156,115 @@ async function supabaseSelect(
   return await res.json();
 }
 
-async function fetchPortalBirthdays(apiUrl: string, token: string): Promise<PortalResponse> {
-  const res = await fetch(apiUrl, {
-    headers: {
-      accept: "application/json",
-      "x-portal-token": token,
-    },
-  });
+function lagosDateParts(): { year: number; month: number; day: number; iso: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const year = Number(get("year"));
+  const month = Number(get("month"));
+  const day = Number(get("day"));
+  const iso = `${get("year")}-${get("month")}-${get("day")}`;
+  return { year, month, day, iso };
+}
 
-  const contentType = res.headers.get("content-type") ?? "";
-  const bodyText = await res.text();
-  if (!res.ok) {
-    throw new Error(`Portal API failed (${res.status}): ${bodyText}`);
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.trim();
+  if (clean === "" || clean.length % 2 !== 0) return new Uint8Array();
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
   }
-  if (!contentType.includes("application/json")) {
-    throw new Error(`Portal API did not return JSON: ${bodyText.slice(0, 180)}`);
+  return out;
+}
+
+function bytesToHex(bytes: ArrayBuffer | Uint8Array): string {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let hex = "";
+  for (const b of u8) hex += b.toString(16).padStart(2, "0");
+  return hex;
+}
+
+function extractChallenge(html: string): { aHex: string; bHex: string; cHex: string; redirectUrl: string } | null {
+  const abc = /var\s+a\s*=\s*toNumbers\("([0-9a-fA-F]+)"\)\s*,\s*b\s*=\s*toNumbers\("([0-9a-fA-F]+)"\)\s*,\s*c\s*=\s*toNumbers\("([0-9a-fA-F]+)"\)/m
+    .exec(html);
+  const aHex = abc?.[1] ?? "";
+  const bHex = abc?.[2] ?? "";
+  const cHex = abc?.[3] ?? "";
+
+  const redirectMatch = /location\.href\s*=\s*"([^"]+)"/m.exec(html) ?? /window\.location\.href\s*=\s*"([^"]+)"/m.exec(html);
+  const redirectUrl = redirectMatch?.[1] ?? "";
+
+  if (!aHex || !bHex || !cHex) return null;
+  return { aHex, bHex, cHex, redirectUrl };
+}
+
+function looksLikeChallenge(contentType: string, bodyText: string): boolean {
+  const ct = contentType.toLowerCase();
+  if (ct.includes("application/json")) return false;
+  return bodyText.includes("slowAES.decrypt") && bodyText.includes("document.cookie") && bodyText.includes("__test=");
+}
+
+async function computeTestCookieValue(ch: { aHex: string; bHex: string; cHex: string }): Promise<string> {
+  const keyBytes = hexToBytes(ch.aHex);
+  const ivBytes = hexToBytes(ch.bHex);
+  const cipherBytes = hexToBytes(ch.cHex);
+  if (keyBytes.length !== 16 || ivBytes.length !== 16 || cipherBytes.length === 0 || cipherBytes.length % 16 !== 0) {
+    throw new Error("Invalid challenge crypto params.");
   }
 
-  const parsed = JSON.parse(bodyText) as PortalResponse;
-  if (!parsed?.success) {
-    throw new Error("Portal API returned success=false.");
+  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["decrypt"]);
+  const plain = await crypto.subtle.decrypt({ name: "AES-CBC", iv: ivBytes }, cryptoKey, cipherBytes);
+  return bytesToHex(plain);
+}
+
+async function fetchPortalBirthdaysWithChallenge(apiUrl: string, token: string, maxAttempts = 4): Promise<PortalResponse> {
+  let currentUrl = apiUrl;
+  let cookieHeader = "";
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(currentUrl, {
+      headers: {
+        accept: "application/json",
+        "x-portal-token": token,
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "accept-language": "en-GB,en;q=0.9",
+      },
+    });
+
+    const contentType = res.headers.get("content-type") ?? "";
+    const bodyText = await res.text();
+
+    if (!res.ok) {
+      throw new Error(`Portal API failed (${res.status}): ${bodyText.slice(0, 180)}`);
+    }
+
+    if (contentType.toLowerCase().includes("application/json")) {
+      const parsed = JSON.parse(bodyText) as PortalResponse;
+      if (!parsed?.success) throw new Error("Portal API returned success=false.");
+      return parsed;
+    }
+
+    if (!looksLikeChallenge(contentType, bodyText)) {
+      throw new Error(`Portal API did not return JSON: ${bodyText.slice(0, 180)}`);
+    }
+
+    const challenge = extractChallenge(bodyText);
+    if (!challenge) throw new Error(`Portal challenge not understood: ${bodyText.slice(0, 180)}`);
+
+    const cookieValue = await computeTestCookieValue(challenge);
+    cookieHeader = `__test=${cookieValue}`;
+    if (challenge.redirectUrl) {
+      currentUrl = new URL(challenge.redirectUrl, currentUrl).toString();
+    }
   }
-  return parsed;
+
+  throw new Error("Portal challenge exceeded max attempts.");
 }
 
 function buildEmailHtml(studentName: string): string {
@@ -296,7 +383,7 @@ Deno.serve(async (req) => {
         : null
     );
 
-    const portalData = portalDataFromBody ?? await fetchPortalBirthdays(portalApiUrl, portalToken);
+    const portalData = portalDataFromBody ?? await fetchPortalBirthdaysWithChallenge(portalApiUrl, portalToken);
 
     // Log run start
     const run = (await supabaseInsert(supabaseUrl, serviceRoleKey, "birthday_runs", {

@@ -42,9 +42,26 @@ create table if not exists public.birthday_email_logs (
 create unique index if not exists uniq_birthday_email_logs_dedupe
   on public.birthday_email_logs (date, reg_number, recipient_email);
 
+-- Student birthday source data (synced from the portal).
+create table if not exists public.birthday_students (
+  reg_number text primary key,
+  name text not null,
+  class text not null default '',
+  birth_day int not null,
+  birth_month int not null,
+  birth_year int null,
+  parent_email text null,
+  parent_email_alt text null,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_birthday_students_birth
+  on public.birthday_students (birth_month, birth_day);
+
 alter table public.birthday_settings enable row level security;
 alter table public.birthday_runs enable row level security;
 alter table public.birthday_email_logs enable row level security;
+alter table public.birthday_students enable row level security;
 
 -- Dashboard: authenticated users can read
 drop policy if exists "birthday_settings_read" on public.birthday_settings;

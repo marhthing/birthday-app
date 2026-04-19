@@ -43,7 +43,7 @@ export default function Dashboard({ user }) {
       } else if (birthdaysRes && birthdaysRes.success === false) {
         setBirthdays([]);
         setBirthdayDate("");
-        setBirthdayError(birthdaysRes.error || "Unable to load birthdays from portal.");
+        setBirthdayError(birthdaysRes.error || "Unable to load birthdays.");
       }
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Unable to load data.");
