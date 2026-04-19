@@ -390,7 +390,7 @@ function buildEmailHtml(studentName: string): string {
   return `
     <div style="font-family:'Georgia','Times New Roman',serif;color:#222;font-size:16px;padding:0;margin:0;">
       <p>Dear Parent,</p>
-      <p>Happy Birthday to ${name}!</p>
+      <p>Happy Birthday to ${name}.</p>
       <p>
         Everyone at Sure Foundation Group of School wishes your child a wonderful day filled with joy and happiness.<br>
         May this new year bring growth, learning, and many cherished moments.
@@ -400,6 +400,21 @@ function buildEmailHtml(studentName: string): string {
   `.trim();
 }
 
+function buildEmailText(studentName: string): string {
+  const name = (studentName || "").trim() || "your child";
+  return [
+    "Dear Parent,",
+    "",
+    `Happy Birthday to ${name}.`,
+    "",
+    "Everyone at Sure Foundation Group of School wishes your child a wonderful day filled with joy and happiness.",
+    "May this new year bring growth, learning, and many cherished moments.",
+    "",
+    "Warm regards,",
+    "SURE FOUNDATION GROUP OF SCHOOL",
+  ].join("\n");
+}
+
 async function sendBrevoEmail(
   apiKey: string,
   senderEmail: string,
@@ -407,6 +422,7 @@ async function sendBrevoEmail(
   toEmail: string,
   subject: string,
   htmlContent: string,
+  textContent: string,
 ) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -420,6 +436,7 @@ async function sendBrevoEmail(
       to: [{ email: toEmail }],
       subject,
       htmlContent,
+      textContent,
     }),
   });
 
@@ -499,7 +516,7 @@ Deno.serve(async (req) => {
       if (recipients.length === 0) continue;
 
       for (const email of recipients) {
-        const subject = `Happy Birthday ${birthday.name}!`;
+        const subject = `Happy Birthday to ${birthday.name} — SFGS`;
         try {
           // Reserve first (prevents double-send across concurrent runs).
           // Dedupe by unique constraint: (date, reg_number, recipient_email)
@@ -537,6 +554,7 @@ Deno.serve(async (req) => {
               email,
               subject,
               buildEmailHtml(birthday.name),
+              buildEmailText(birthday.name),
             );
 
           await supabaseUpdate(
