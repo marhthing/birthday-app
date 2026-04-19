@@ -7,6 +7,21 @@ function formatDateTime(value) {
   return date.toLocaleString();
 }
 
+async function fetchJson(url, init) {
+  const res = await fetch(url, init);
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (!ct.includes("application/json")) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${url} returned ${res.status} (${ct || "no content-type"}): ${text.slice(0, 120)}`);
+  }
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data?.error || `HTTP ${res.status}`;
+    throw new Error(`${url}: ${msg}`);
+  }
+  return data;
+}
+
 function cronForMinutes(minutes) {
   const m = Number(minutes);
   if (!Number.isFinite(m) || m <= 0) return "*/5 * * * *";
@@ -41,10 +56,10 @@ export default function Dashboard({ user }) {
     setBirthdayError("");
     try {
       const [settingsRes, runsRes, logsRes, birthdaysRes] = await Promise.all([
-        fetch("/api/settings").then((r) => r.json()),
-        fetch("/api/runs?limit=20").then((r) => r.json()),
-        fetch("/api/logs?limit=50").then((r) => r.json()),
-        fetch("/api/birthdays?limit=200").then((r) => r.json()),
+        fetchJson("/api/settings"),
+        fetchJson("/api/runs?limit=20"),
+        fetchJson("/api/logs?limit=50"),
+        fetchJson("/api/birthdays?limit=200"),
       ]);
 
       if (!settingsRes.success || !runsRes.success || !logsRes.success) {
@@ -90,11 +105,11 @@ export default function Dashboard({ user }) {
     setSaving(true);
     setStatus(null);
     try {
-      const res = await fetch("/api/settings", {
+      const res = await fetchJson("/api/settings", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(updates),
-      }).then((r) => r.json());
+      });
 
       if (!res.success) {
         setStatus(res.error || "Unable to save settings.");
