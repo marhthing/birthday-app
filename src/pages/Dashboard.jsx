@@ -243,12 +243,66 @@ export default function Dashboard({ user }) {
 
   if (!user) {
     return (
-      <div className="card">
-        <h1 className="h1">Open from the Portal</h1>
-        <p className="muted">
-          This dashboard uses portal single sign-on. Open it from the SFGS portal sidebar:{" "}
-          <strong>Birthdays</strong>.
-        </p>
+      <div className="splash">
+        <div className="splash-glow splash-glow-1" />
+        <div className="splash-glow splash-glow-2" />
+
+        <div className="splash-card">
+          <div className="splash-logo-wrap">
+            <div className="splash-logo-ring" />
+            <img src="/logo.png?v=1" alt="SFGS logo" className="splash-logo" />
+          </div>
+
+          <div className="splash-badge">
+            <CakeSlice size={12} />
+            Birthday Automation System
+          </div>
+
+          <h1 className="splash-title">
+            Sure Foundation<br />Group of Schools
+          </h1>
+          <p className="splash-subtitle">Birthday Email Dashboard</p>
+
+          <div className="splash-divider" />
+
+          <div className="splash-steps">
+            <div className="splash-step">
+              <div className="splash-step-num">1</div>
+              <div className="splash-step-text">
+                Log in to the <strong>SFGS Portal</strong>
+              </div>
+            </div>
+            <div className="splash-step-arrow">→</div>
+            <div className="splash-step">
+              <div className="splash-step-num">2</div>
+              <div className="splash-step-text">
+                Open <strong>Birthdays</strong> from the sidebar
+              </div>
+            </div>
+            <div className="splash-step-arrow">→</div>
+            <div className="splash-step">
+              <div className="splash-step-num">3</div>
+              <div className="splash-step-text">
+                Dashboard loads <strong>automatically</strong>
+              </div>
+            </div>
+          </div>
+
+          <a
+            className="splash-cta"
+            href="https://portal.sfgs.com.ng/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Mail size={16} />
+            Go to SFGS Portal
+          </a>
+
+          <p className="splash-note">
+            Access is granted via portal single sign-on only.
+          </p>
+        </div>
+
       </div>
     );
   }
