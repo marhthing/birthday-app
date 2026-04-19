@@ -1,4 +1,4 @@
-import { requireSession } from "./_auth.js";
+it isimport { requireSession } from "./_auth.js";
 import { supabaseAdmin } from "./_supabase.js";
 
 function supabaseFunctionUrlFromProjectUrl(projectUrl) {

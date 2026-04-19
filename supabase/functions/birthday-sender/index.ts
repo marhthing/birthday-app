@@ -175,6 +175,138 @@ function bytesToHex(bytes: ArrayBuffer | Uint8Array): string {
   return hex;
 }
 
+// Minimal AES-128-CBC decrypt (no padding validation), compatible with slowAES used by the portal.
+// Implemented here because WebCrypto AES-CBC rejects some ciphertexts used by the portal challenge.
+const AES_SBOX = new Uint8Array([
+  99, 124, 119, 123, 242, 107, 111, 197, 48, 1, 103, 43, 254, 215, 171, 118,
+  202, 130, 201, 125, 250, 89, 71, 240, 173, 212, 162, 175, 156, 164, 114, 192,
+  183, 253, 147, 38, 54, 63, 247, 204, 52, 165, 229, 241, 113, 216, 49, 21,
+  4, 199, 35, 195, 24, 150, 5, 154, 7, 18, 128, 226, 235, 39, 178, 117,
+  9, 131, 44, 26, 27, 110, 90, 160, 82, 59, 214, 179, 41, 227, 47, 132,
+  83, 209, 0, 237, 32, 252, 177, 91, 106, 203, 190, 57, 74, 76, 88, 207,
+  208, 239, 170, 251, 67, 77, 51, 133, 69, 249, 2, 127, 80, 60, 159, 168,
+  81, 163, 64, 143, 146, 157, 56, 245, 188, 182, 218, 33, 16, 255, 243, 210,
+  205, 12, 19, 236, 95, 151, 68, 23, 196, 167, 126, 61, 100, 93, 25, 115,
+  96, 129, 79, 220, 34, 42, 144, 136, 70, 238, 184, 20, 222, 94, 11, 219,
+  224, 50, 58, 10, 73, 6, 36, 92, 194, 211, 172, 98, 145, 149, 228, 121,
+  231, 200, 55, 109, 141, 213, 78, 169, 108, 86, 244, 234, 101, 122, 174, 8,
+  186, 120, 37, 46, 28, 166, 180, 198, 232, 221, 116, 31, 75, 189, 139, 138,
+  112, 62, 181, 102, 72, 3, 246, 14, 97, 53, 87, 185, 134, 193, 29, 158,
+  225, 248, 152, 17, 105, 217, 142, 148, 155, 30, 135, 233, 206, 85, 40, 223,
+  140, 161, 137, 13, 191, 230, 66, 104, 65, 153, 45, 15, 176, 84, 187, 22,
+]);
+
+const AES_RCON = new Uint8Array([0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]);
+
+function gfMul(a: number, b: number): number {
+  let p = 0;
+  let aa = a & 0xff;
+  let bb = b & 0xff;
+  for (let i = 0; i < 8; i++) {
+    if (bb & 1) p ^= aa;
+    const hi = aa & 0x80;
+    aa = (aa << 1) & 0xff;
+    if (hi) aa ^= 0x1b;
+    bb >>= 1;
+  }
+  return p & 0xff;
+}
+
+function subWord(w: Uint8Array): Uint8Array {
+  return new Uint8Array([AES_SBOX[w[0]], AES_SBOX[w[1]], AES_SBOX[w[2]], AES_SBOX[w[3]]]);
+}
+
+function rotWord(w: Uint8Array): Uint8Array {
+  return new Uint8Array([w[1], w[2], w[3], w[0]]);
+}
+
+function keyExpansion128(key: Uint8Array): Uint8Array {
+  const w = new Uint8Array(176);
+  w.set(key.slice(0, 16), 0);
+
+  let bytesGenerated = 16;
+  let rconIter = 1;
+  const temp = new Uint8Array(4);
+
+  while (bytesGenerated < 176) {
+    temp.set(w.slice(bytesGenerated - 4, bytesGenerated));
+    if (bytesGenerated % 16 === 0) {
+      const t = subWord(rotWord(temp));
+      t[0] ^= AES_RCON[rconIter++];
+      temp.set(t);
+    }
+    for (let i = 0; i < 4; i++) {
+      w[bytesGenerated] = w[bytesGenerated - 16] ^ temp[i];
+      bytesGenerated++;
+    }
+  }
+  return w;
+}
+
+function addRoundKey(state: Uint8Array, roundKey: Uint8Array) {
+  for (let i = 0; i < 16; i++) state[i] ^= roundKey[i];
+}
+
+function invSubBytes(state: Uint8Array) {
+  const inv = (invSubBytes as unknown as { _inv?: Uint8Array })._inv ?? (() => {
+    const t = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) t[AES_SBOX[i]] = i;
+    (invSubBytes as unknown as { _inv?: Uint8Array })._inv = t;
+    return t;
+  })();
+  for (let i = 0; i < 16; i++) state[i] = inv[state[i]];
+}
+
+function invShiftRows(s: Uint8Array) {
+  const t = s.slice();
+  s[1] = t[13]; s[5] = t[1]; s[9] = t[5]; s[13] = t[9];
+  s[2] = t[10]; s[6] = t[14]; s[10] = t[2]; s[14] = t[6];
+  s[3] = t[7]; s[7] = t[11]; s[11] = t[15]; s[15] = t[3];
+}
+
+function invMixColumns(s: Uint8Array) {
+  for (let c = 0; c < 4; c++) {
+    const i = c * 4;
+    const a0 = s[i], a1 = s[i + 1], a2 = s[i + 2], a3 = s[i + 3];
+    s[i] = gfMul(a0, 0x0e) ^ gfMul(a1, 0x0b) ^ gfMul(a2, 0x0d) ^ gfMul(a3, 0x09);
+    s[i + 1] = gfMul(a0, 0x09) ^ gfMul(a1, 0x0e) ^ gfMul(a2, 0x0b) ^ gfMul(a3, 0x0d);
+    s[i + 2] = gfMul(a0, 0x0d) ^ gfMul(a1, 0x09) ^ gfMul(a2, 0x0e) ^ gfMul(a3, 0x0b);
+    s[i + 3] = gfMul(a0, 0x0b) ^ gfMul(a1, 0x0d) ^ gfMul(a2, 0x09) ^ gfMul(a3, 0x0e);
+  }
+}
+
+function aes128DecryptBlock(block: Uint8Array, expandedKey: Uint8Array): Uint8Array {
+  const state = block.slice();
+  addRoundKey(state, expandedKey.slice(160, 176));
+
+  for (let round = 9; round >= 1; round--) {
+    invShiftRows(state);
+    invSubBytes(state);
+    addRoundKey(state, expandedKey.slice(round * 16, round * 16 + 16));
+    invMixColumns(state);
+  }
+
+  invShiftRows(state);
+  invSubBytes(state);
+  addRoundKey(state, expandedKey.slice(0, 16));
+  return state;
+}
+
+function aes128CbcDecrypt(cipher: Uint8Array, key: Uint8Array, iv: Uint8Array): Uint8Array {
+  if (cipher.length % 16 !== 0) throw new Error("Cipher length must be multiple of 16.");
+  const expandedKey = keyExpansion128(key);
+  const out = new Uint8Array(cipher.length);
+  let prev = iv;
+
+  for (let off = 0; off < cipher.length; off += 16) {
+    const block = cipher.slice(off, off + 16);
+    const dec = aes128DecryptBlock(block, expandedKey);
+    for (let i = 0; i < 16; i++) out[off + i] = dec[i] ^ prev[i];
+    prev = block;
+  }
+  return out;
+}
+
 function extractChallenge(html: string): { aHex: string; bHex: string; cHex: string; redirectUrl: string } | null {
   const abc = /var\s+a\s*=\s*toNumbers\("([0-9a-fA-F]+)"\)\s*,\s*b\s*=\s*toNumbers\("([0-9a-fA-F]+)"\)\s*,\s*c\s*=\s*toNumbers\("([0-9a-fA-F]+)"\)/m
     .exec(html);
@@ -203,8 +335,7 @@ async function computeTestCookieValue(ch: { aHex: string; bHex: string; cHex: st
     throw new Error("Invalid challenge crypto params.");
   }
 
-  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["decrypt"]);
-  const plain = await crypto.subtle.decrypt({ name: "AES-CBC", iv: ivBytes }, cryptoKey, cipherBytes);
+  const plain = aes128CbcDecrypt(cipherBytes, keyBytes, ivBytes);
   return bytesToHex(plain);
 }
 
