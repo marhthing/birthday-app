@@ -166,28 +166,6 @@ export default function Dashboard({ user }) {
                   <option value="no">No</option>
                 </select>
               </label>
-
-              <label className="label">
-                Interval (minutes)
-                <input
-                  className="input"
-                  type="number"
-                  min={1}
-                  max={1440}
-                  value={settings.interval_minutes ?? 60}
-                  onChange={(e) => setSettings({ ...settings, interval_minutes: Number(e.target.value) })}
-                  disabled={saving}
-                />
-              </label>
-
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={saving}
-                onClick={() => updateSettings({ interval_minutes: settings.interval_minutes ?? 60 })}
-              >
-                {saving ? "Saving..." : "Save interval"}
-              </button>
             </div>
           ) : (
             <div className="muted">No settings row found. Run the SQL in `birthday-app/supabase/schema.sql`.</div>

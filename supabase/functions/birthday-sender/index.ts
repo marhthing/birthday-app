@@ -365,21 +365,12 @@ Deno.serve(async (req) => {
     ) as Array<Record<string, unknown>>;
     const settings = settingsRows?.[0] ?? {};
     const enabled = Boolean(settings["enabled"] ?? true);
-    const intervalMinutes = Number(settings["interval_minutes"] ?? 60);
     const lastRunAt = typeof settings["last_run_at"] === "string" ? settings["last_run_at"] as string : "";
 
     if (!enabled) {
       return new Response(JSON.stringify({ success: true, skipped: "disabled" }), { headers: jsonHeaders });
     }
-
-    if (lastRunAt) {
-      const delta = minutesBetween(new Date(), new Date(lastRunAt));
-      if (!Number.isNaN(delta) && delta >= 0 && delta < Math.max(1, intervalMinutes)) {
-        return new Response(JSON.stringify({ success: true, skipped: "interval", delta_minutes: delta }), {
-          headers: jsonHeaders,
-        });
-      }
-    }
+    // No interval gating: the scheduler frequency controls how often we check.
 
     const portalDataFromBody = payload?.portal_data ?? (
       payload?.success === true && payload?.date && payload?.count !== undefined && Array.isArray(payload?.birthdays)

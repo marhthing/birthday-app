@@ -25,7 +25,6 @@ export default async function handler(req, res) {
     const updates = {};
 
     if (typeof body.enabled === "boolean") updates.enabled = body.enabled;
-    if (typeof body.interval_minutes === "number") updates.interval_minutes = body.interval_minutes;
     updates.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -46,4 +45,3 @@ export default async function handler(req, res) {
 
   res.status(405).json({ success: false, error: "Method not allowed" });
 }
-

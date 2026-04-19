@@ -3,7 +3,6 @@
 create table if not exists public.birthday_settings (
   id bigint primary key default 1,
   enabled boolean not null default true,
-  interval_minutes int not null default 60,
   last_run_at timestamptz null,
   last_run_sent int not null default 0,
   last_run_failed int not null default 0,
