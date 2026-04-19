@@ -268,12 +268,16 @@ async function fetchPortalBirthdaysWithChallenge(apiUrl: string, token: string, 
 }
 
 function buildEmailHtml(studentName: string): string {
+  const name = (studentName || "").trim() || "your child";
   return `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.5">
-      <p>Dear Parent/Guardian,</p>
-      <p>We are happy to celebrate <strong>${studentName}</strong> today.</p>
-      <p>Happy Birthday from all of us at Sure Foundation Group of Schools!</p>
-      <p style="margin-top:18px;color:#6b7280;font-size:12px">This is an automated message.</p>
+    <div style="font-family:'Georgia','Times New Roman',serif;color:#222;font-size:16px;padding:0;margin:0;">
+      <p>Dear Parent,</p>
+      <p>Happy Birthday to ${name}!</p>
+      <p>
+        Everyone at Sure Foundation Group of School wishes your child a wonderful day filled with joy and happiness.<br>
+        May this new year bring growth, learning, and many cherished moments.
+      </p>
+      <p style="margin-top:32px;">Warm regards,<br>SURE FOUNDATION GROUP OF SCHOOL</p>
     </div>
   `.trim();
 }
